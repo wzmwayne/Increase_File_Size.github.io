@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>增加文件大小</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="file"],
+        input[type="number"],
+        select,
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            transition: border-color 0.3s ease;
+        }
+        input[type="file"]:focus,
+        input[type="number"]:focus,
+        select:focus,
+        button:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.cancel {
+            background-color: #f44336;
+        }
+        button.cancel:hover {
+            background-color: #d32f2f;
+        }
+        #output {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #333;
+        }
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0df;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress-bar {
+            width: 0;
+            height: 20px;
+            background-color: #4CAF50;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            transition: width 0.5s ease-in-out;
+        }
+        #statusMessage {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #777;
+        }
+        #expectedFileSize {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #777;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s forwards;
+        }
+        .fade-out {
+            animation: fadeOut 0.5s forwards;
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="pageTitle"></h1>
+        <label for="languageSelect">选择语言:</label>
+        <select id="languageSelect" onchange="changeLanguage()">
+            <option value="zh-CN">中文</option>
+            <option value="en-US">English</option>
+        </select>
+        <br>
+        <input type="file" id="fileInput" onchange="displayFileSize()">
+        <br>
+        <label id="amountToAddLabel"></label>
+        <input type="number" id="amountToAdd" value="1" oninput="updateExpectedFileSize()">
+        <select id="unitSelect" onchange="updateExpectedFileSize()">
+            <option value="bytes" id="bytesOption"></option>
+            <option value="kb" id="kbOption"></option>
+            <option value="mb" id="mbOption"></option>
+            <option value="gb" id="gbOption"></option>
+        </select>
+        <button onclick="increaseFileSize()" id="increaseButton"></button>
+        <button onclick="cancelOperation()" id="cancelButton" class="cancel" style="display: none;">取消</button>
+        <div id="expectedFileSize"></div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div id="statusMessage"></div>
+        <div id="output"></div>
+        <div id="fileSizeDisplay"></div>
+    </div>
+
+    <script>
+        const translations = {
+            'zh-CN': {
+                pageTitle: "增加文件大小",
+                amountToAddLabel: "要增加的数量:",
+                bytesOption: "字节",
+                kbOption: "KB",
+                mbOption: "MB",
+                gbOption: "GB",
+                increaseButton: "增加大小",
+                cancelButton: "取消",
+                readingFile: "正在读取...",
+                increasingFileSize: "正在增加...",
+                preparingDownload: "准备下载...",
+                fileSizeIncreased: "文件大小增加了",
+                expectedFileSize: "预计增加后的文件大小:"
+            },
+            'en-US': {
+                pageTitle: "Increase File Size",
+                amountToAddLabel: "Amount to add:",
+                bytesOption: "Bytes",
+                kbOption: "KB",
+                mbOption: "MB",
+                gbOption: "GB",
+                increaseButton: "Increase Size",
+                cancelButton: "Cancel",
+                readingFile: "Reading file...",
+                increasingFileSize: "Increasing file size...",
+                preparingDownload: "Preparing download...",
+                fileSizeIncreased: "File size increased by",
+                expectedFileSize: "Expected file size after increase:"
+            }
+        };
+
+        let selectedLanguage = 'zh-CN';
+        let cancelRequested = false;
+
+        function updateContent(language) {
+            document.getElementById('pageTitle').innerText = translations[language].pageTitle;
+            document.getElementById('amountToAddLabel').innerText = translations[language].amountToAddLabel;
+            document.getElementById('bytesOption').innerText = translations[language].bytesOption;
+            document.getElementById('kbOption').innerText = translations[language].kbOption;
+            document.getElementById('mbOption').innerText = translations[language].mbOption;
+            document.getElementById('gbOption').innerText = translations[language].gbOption;
+            document.getElementById('increaseButton').innerText = translations[language].increaseButton;
+            document.getElementById('cancelButton').innerText = translations[language].cancelButton;
+            document.getElementById('expectedFileSize').innerText = translations[language].expectedFileSize;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
+            if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
+            if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return bytes + ' Bytes';
+        }
+
+        function displayFileSize() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+            document.getElementById('fileSizeDisplay').innerText = `原始文件大小: ${formatFileSize(file.size)}`;
+            updateExpectedFileSize();
+        }
+
+        function convertToBytes(amount, unit) {
+            switch (unit.toLowerCase()) {
+                case 'kb': return amount * 1024;
+                case 'mb': return amount * 1024 * 1024;
+                case 'gb': return amount * 1024 * 1024 * 1024;
+                default: return amount;
+            }
+        }
+
+        function resetProgressBar() {
+            document.getElementById('progressBar').classList.remove('fade-in', 'fade-out');
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressBar').innerText = '';
+        }
+
+        function updateStatusMessage(message) {
+            document.getElementById('statusMessage').innerText = message;
+        }
+
+        function showCancelButton(show) {
+            const cancelButton = document.getElementById('cancelButton');
+            if (show) {
+                cancelButton.style.display = 'inline-block';
+                cancelButton.classList.add('fade-in');
+                cancelButton.classList.remove('fade-out');
+            } else {
+                cancelButton.classList.add('fade-out');
+                setTimeout(() => cancelButton.style.display = 'none', 500);
+            }
+        }
+
+        function increaseFileSize() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) {
+                alert(translations[selectedLanguage].pleaseSelectAFile);
+                return;
+            }
+
+            const amountToAdd = parseFloat(document.getElementById('amountToAdd').value);
+            const unitSelect = document.getElementById('unitSelect').value;
+            const bytesToAdd = convertToBytes(amountToAdd, unitSelect);
+
+            const reader = new FileReader();
+            const chunkSize = 1024 * 1024; // 每个块1MB
+
+            resetProgressBar();
+            updateStatusMessage(translations[selectedLanguage].readingFile);
+            showCancelButton(true);
+
+            reader.onloadstart = () => {
+                resetProgressBar();
+                updateStatusMessage(translations[selectedLanguage].readingFile);
+            };
+
+            reader.onprogress = event => {
+                if (event.lengthComputable && !cancelRequested) {
+                    const percentComplete = Math.floor((event.loaded / event.total) * 100);
+                    updateProgressBar(percentComplete);
+                }
+            };
+
+            reader.onload = event => {
+                if (cancelRequested) {
+                    cancelRequested = false;
+                    showCancelButton(false);
+                    updateStatusMessage("");
+                    return;
+                }
+
+                const originalData = new Uint8Array(event.target.result);
+                const additionalData = new Uint8Array(bytesToAdd);
+                const combinedData = new Uint8Array(originalData.byteLength + additionalData.byteLength);
+                combinedData.set(originalData, 0);
+                combinedData.set(additionalData, originalData.byteLength);
+
+                let currentOffset = 0;
+                resetProgressBar();
+                updateStatusMessage(translations[selectedLanguage].increasingFileSize);
+
+                function writeChunk(offset) {
+                    if (offset < combinedData.byteLength && !cancelRequested) {
+                        const end = Math.min(offset + chunkSize, combinedData.byteLength);
+                        offset += chunkSize;
+                        const percentComplete = Math.floor((offset / combinedData.byteLength) * 100);
+                        updateProgressBar(percentComplete);
+                        setTimeout(() => writeChunk(offset), 1); // 模拟写入时间
+                    } else {
+                        if (cancelRequested) {
+                            cancelRequested = false;
+                            showCancelButton(false);
+                            updateStatusMessage("");
+                            return;
+                        }
+                        const blob = new Blob([combinedData], { type: file.type });
+                        const url = URL.createObjectURL(blob);
+                        resetProgressBar();
+                        updateStatusMessage(translations[selectedLanguage].preparingDownload);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = file.name;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        resetProgressBar();
+                        updateStatusMessage("");
+                        document.getElementById('output').innerText = `${translations[selectedLanguage].fileSizeIncreased} ${formatFileSize(bytesToAdd)}.`;
+                        showCancelButton(false);
+                    }
+                }
+
+                writeChunk(currentOffset);
+            };
+
+            reader.onerror = () => {
+                cancelRequested = false;
+                resetProgressBar();
+                updateStatusMessage("");
+                alert(translations[selectedLanguage].errorReadingFile);
+                showCancelButton(false);
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function cancelOperation() {
+            cancelRequested = true;
+            updateStatusMessage("操作已取消");
+            showCancelButton(false);
+        }
+
+        function updateProgressBar(percentComplete) {
+            document.getElementById('progressBar').classList.add('fade-in');
+            document.getElementById('progressBar').style.width = percentComplete + '%';
+            document.getElementById('progressBar').innerText = percentComplete + '%';
+        }
+
+        function updateExpectedFileSize() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+            const amountToAdd = parseFloat(document.getElementById('amountToAdd').value);
+            const unitSelect = document.getElementById('unitSelect').value;
+            const bytesToAdd = convertToBytes(amountToAdd, unitSelect);
+            const newSize = file.size + bytesToAdd;
+            document.getElementById('expectedFileSize').innerText = `${translations[selectedLanguage].expectedFileSize} ${formatFileSize(newSize)}`;
+        }
+
+        updateContent(selectedLanguage);
+    </script>
+</body>
+</html>
+
+
+
